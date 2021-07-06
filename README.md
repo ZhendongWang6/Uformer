@@ -23,7 +23,7 @@ Then generate training patches for training by:
 python3 generate_patches_SIDD.py --srcdir ../SIDD_Medium_Srgb/Data --tar_dir ../datasets/denoising/sidd/train
 ```
 
-For evaluation, we use the same evaluation data as [here](https://drive.google.com/drive/folders/1LzYL4GYH5U40rae_4jvy8kzOtsiMeXFn), and put it into the dir `../datasets/denoising/sidd/val`.
+For evaluation, we use the same evaluation data as [here](https://drive.google.com/drive/folders/1j5ESMU0HJGD-wU6qbEdnt569z7sM3479), and put it into the dir `../datasets/denoising/sidd/val`.
 
 ## Training
 ### Denoising
