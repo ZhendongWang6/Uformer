@@ -1,5 +1,5 @@
 # Uformer: A General U-Shaped Transformer for Image Restoration 
-<b>Zhendong Wang, Xiaodong Cun, jianmin Bao and Jianzhuang Liu</b>
+<b>Zhendong Wang, Xiaodong Cun, Jianmin Bao and Jianzhuang Liu</b>
 
 Paper: https://arxiv.org/abs/2106.03106
 
