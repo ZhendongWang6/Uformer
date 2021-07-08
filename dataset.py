@@ -16,12 +16,9 @@ class DataLoaderTrain(Dataset):
 
         self.target_transform = target_transform
         
-        if 'SIDD' in rgb_dir:
-            gt_dir = 'groundtruth'
-            input_dir = 'input'
-        else:
-            gt_dir = 'HR'
-            input_dir = 'LR/10'
+        gt_dir = 'groundtruth'
+        input_dir = 'input'
+        
         clean_files = sorted(os.listdir(os.path.join(rgb_dir, gt_dir)))
         noisy_files = sorted(os.listdir(os.path.join(rgb_dir, input_dir)))
         
@@ -130,12 +127,9 @@ class DataLoaderVal(Dataset):
 
         self.target_transform = target_transform
 
-        if 'SIDD' in rgb_dir:
-            gt_dir = 'groundtruth'
-            input_dir = 'input'
-        else:
-            gt_dir = 'HR_sub64'
-            input_dir = 'LR/10_sub64'
+        gt_dir = 'groundtruth'
+        input_dir = 'input'
+        
         clean_files = sorted(os.listdir(os.path.join(rgb_dir, gt_dir)))
         noisy_files = sorted(os.listdir(os.path.join(rgb_dir, input_dir)))
 
