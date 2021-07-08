@@ -22,7 +22,7 @@ pip3 install -r requirements.txt
 For training data of SIDD, you can download the SIDD-Medium dataset from the [official url](https://www.eecs.yorku.ca/~kamel/sidd/dataset.php).
 Then generate training patches for training by:
 ```python
-python3 generate_patches_SIDD.py --srcdir ../SIDD_Medium_Srgb/Data --tar_dir ../datasets/denoising/sidd/train
+python3 generate_patches_SIDD.py --src_dir ../SIDD_Medium_Srgb/Data --tar_dir ../datasets/denoising/sidd/train
 ```
 
 For evaluation, we use the same evaluation data as [here](https://drive.google.com/drive/folders/1j5ESMU0HJGD-wU6qbEdnt569z7sM3479), and put it into the dir `../datasets/denoising/sidd/val`.
