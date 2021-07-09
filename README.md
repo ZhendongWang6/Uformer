@@ -37,6 +37,8 @@ python3 ./train.py --arch Uformer --batch_size 32 --gpu '0,1' \
     --val_dir ../datasets/denoising/sidd/val --embed_dim 32 --warmup
 ```
 
+More configuration can be founded in `train.sh`.
+
 ## Evaluation
 ### Denoising
 
@@ -45,7 +47,7 @@ To evaluate `Uformer32` on SIDD, you can run:
 ```python
 python3 ./test.py --arch Uformer --batch_size 1 --gpu '0' \
     --input_dir ../datasets/denoising/sidd/val --result_dir YOUR_RESULT_DIR \
-    --weights YOUR_PRETRAINED_MODEL_PATH --embed_dim 32 --warmup
+    --weights YOUR_PRETRAINED_MODEL_PATH --embed_dim 32 
 ```
 
 
