@@ -61,7 +61,7 @@ test_dataset = get_validation_data(args.input_dir)
 test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=8, drop_last=False)
 
 model_restoration= utils.get_arch(args)
-model_restoration = torch.nn.DataParallel (model_restoration)
+model_restoration = torch.nn.DataParallel(model_restoration)
 
 utils.load_checkpoint(model_restoration,args.weights)
 print("===>Testing using weights: ", args.weights)
@@ -82,8 +82,7 @@ with torch.no_grad():
         ssim_val_rgb.append(ssim_loss(rgb_restored, rgb_gt, multichannel=True))
 
         if args.save_images:
-            for batch in range(len(rgb_gt)):
-                utils.save_img(os.path.join(args.result_dir,filenames[batch][:-4] + '.png'), img_as_ubyte(rgb_restored[batch]))
+            utils.save_img(os.path.join(args.result_dir,filenames[0]), img_as_ubyte(rgb_restored))
 
 psnr_val_rgb = sum(psnr_val_rgb)/len(test_dataset)
 ssim_val_rgb = sum(ssim_val_rgb)/len(test_dataset)

@@ -75,6 +75,11 @@ elif opt.optimizer.lower() == 'adamw':
 else:
     raise Exception("Error optimizer...")
 
+
+######### DataParallel ###########
+model_restoration = torch.nn.DataParallel (model_restoration)
+model_restoration.cuda()
+
 ######### Resume ###########
 if opt.resume:
     path_chk_rest = opt.pretrain_weights
@@ -103,11 +108,6 @@ else:
     scheduler = StepLR(optimizer, step_size=step, gamma=0.5)
     scheduler.step()
 
-
-######### DataParallel ###########
-model_restoration = torch.nn.DataParallel (model_restoration)
-# print(model_restoration)
-model_restoration.cuda()
 
 ######### Loss ###########
 criterion = CharbonnierLoss().cuda()
