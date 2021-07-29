@@ -370,6 +370,8 @@ class LeFF(nn.Module):
 
         return x
 
+
+
 #########################################
 ########### window operation#############
 def window_partition(x, win_size):
@@ -497,33 +499,30 @@ class LeWinTransformerBlock(nn.Module):
         return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
                f"win_size={self.win_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         B, L, C = x.shape
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
 
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x).detach()  # 1 H W 1
-            h_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            w_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            cnt = 0
-            for h in h_slices:
-                for w in w_slices:
-                    img_mask[:, h, w, :] = cnt
-                    cnt += 1
+            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            
+            if mask != None:
+                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
 
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, win_size, win_size, 1
+            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
             mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-            attn_mask = attn_mask.type_as(x)
         else:
-            attn_mask = None
+            if mask != None:
+                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+                attn_mask = window_partition(attn_mask, self.win_size)
+                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
+                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
+            else:
+                attn_mask = None
             
         shortcut = x
         x = self.norm1(x)
@@ -596,32 +595,30 @@ class LeWinTransformer_Cross(nn.Module):
         return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
                f"win_size={self.win_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
 
-    def forward(self, x, attn_kv=None):
+    def forward(self, x, attn_kv=None, mask=None):
         B, L, C = x.shape
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
+
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x).detach()  # 1 H W 1
-            h_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            w_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            cnt = 0
-            for h in h_slices:
-                for w in w_slices:
-                    img_mask[:, h, w, :] = cnt
-                    cnt += 1
+            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            
+            if mask != None:
+                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
 
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, win_size, win_size, 1
+            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
             mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-            attn_mask = attn_mask.type_as(x)
         else:
-            attn_mask = None
+            if mask != None:
+                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+                attn_mask = window_partition(attn_mask, self.win_size)
+                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
+                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
+            else:
+                attn_mask = None
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
@@ -707,32 +704,30 @@ class LeWinTransformer_CatCross(nn.Module):
         return f"dim={self.dim}, input_resolution={self.input_resolution}, num_heads={self.num_heads}, " \
                f"win_size={self.win_size}, shift_size={self.shift_size}, mlp_ratio={self.mlp_ratio}"
 
-    def forward(self, x, attn_kv=None):
+    def forward(self, x, attn_kv=None, mask=None):
         B, L, C = x.shape
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
+
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x).detach()  # 1 H W 1
-            h_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            w_slices = (slice(0, -self.win_size),
-                        slice(-self.win_size, -self.shift_size),
-                        slice(-self.shift_size, None))
-            cnt = 0
-            for h in h_slices:
-                for w in w_slices:
-                    img_mask[:, h, w, :] = cnt
-                    cnt += 1
+            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            
+            if mask != None:
+                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
 
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, win_size, win_size, 1
+            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
             mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
             attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
-            attn_mask = attn_mask.type_as(x)
         else:
-            attn_mask = None
+            if mask != None:
+                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+                attn_mask = window_partition(attn_mask, self.win_size)
+                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
+                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
+            else:
+                attn_mask = None
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
@@ -806,12 +801,12 @@ class BasicUformerLayer(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}, input_resolution={self.input_resolution}, depth={self.depth}"    
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
-                x = blk(x)
+                x = blk(x,mask)
         return x
 
 ########### Basic decoderlayer of Uformer_Cross ################
@@ -842,12 +837,12 @@ class CrossUformerLayer(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}, input_resolution={self.input_resolution}, depth={self.depth}"
         
-    def forward(self, x, attn_kv=None):
+    def forward(self, x, attn_kv=None, mask=None):
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
-                x = blk(x,attn_kv)
+                x = blk(x,attn_kv,mask)
         return x 
 
 ########### Basic decoderlayer of Uformer_CatCross ################
@@ -878,12 +873,12 @@ class CatCrossUformerLayer(nn.Module):
     def extra_repr(self) -> str:
         return f"dim={self.dim}, input_resolution={self.input_resolution}, depth={self.depth}"
         
-    def forward(self, x, attn_kv=None):
+    def forward(self, x, attn_kv=None, mask=None):
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
             else:
-                x = blk(x,attn_kv)
+                x = blk(x,attn_kv, mask)
         return x 
 
 
@@ -1081,39 +1076,39 @@ class Uformer(nn.Module):
     def extra_repr(self) -> str:
         return f"embed_dim={self.embed_dim}, token_projection={self.token_projection}, token_mlp={self.mlp},win_size={self.win_size}"
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         # Input Projection
         y = self.input_proj(x)
         y = self.pos_drop(y)
         #Encoder
-        conv0 = self.encoderlayer_0(y)
+        conv0 = self.encoderlayer_0(y,mask=mask)
         pool0 = self.dowsample_0(conv0)
-        conv1 = self.encoderlayer_1(pool0)
+        conv1 = self.encoderlayer_1(pool0,mask=mask)
         pool1 = self.dowsample_1(conv1)
-        conv2 = self.encoderlayer_2(pool1)
+        conv2 = self.encoderlayer_2(pool1,mask=mask)
         pool2 = self.dowsample_2(conv2)
-        conv3 = self.encoderlayer_3(pool2)
+        conv3 = self.encoderlayer_3(pool2,mask=mask)
         pool3 = self.dowsample_3(conv3)
 
         # Bottleneck
-        conv4 = self.conv(pool3)
+        conv4 = self.conv(pool3, mask=mask)
 
         #Decoder
         up0 = self.upsample_0(conv4)
         deconv0 = torch.cat([up0,conv3],-1)
-        deconv0 = self.decoderlayer_0(deconv0)
+        deconv0 = self.decoderlayer_0(deconv0,mask=mask)
         
         up1 = self.upsample_1(deconv0)
         deconv1 = torch.cat([up1,conv2],-1)
-        deconv1 = self.decoderlayer_1(deconv1)
+        deconv1 = self.decoderlayer_1(deconv1,mask=mask)
 
         up2 = self.upsample_2(deconv1)
         deconv2 = torch.cat([up2,conv1],-1)
-        deconv2 = self.decoderlayer_2(deconv2)
+        deconv2 = self.decoderlayer_2(deconv2,mask=mask)
 
         up3 = self.upsample_3(deconv2)
         deconv3 = torch.cat([up3,conv0],-1)
-        deconv3 = self.decoderlayer_3(deconv3)
+        deconv3 = self.decoderlayer_3(deconv3,mask=mask)
 
         # Output Projection
         y = self.output_proj(deconv3)
@@ -1313,36 +1308,36 @@ class Uformer_Cross(nn.Module):
     def extra_repr(self) -> str:
         return f"embed_dim={self.embed_dim}, token_projection={self.token_projection}, token_mlp={self.mlp},win_size={self.win_size}"
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         # Input Projection
         y = self.input_proj(x)
         y = self.pos_drop(y)
 
         # Encoder
-        conv0 = self.encoderlayer_0(y)
+        conv0 = self.encoderlayer_0(y, mask=mask)
         pool0 = self.dowsample_0(conv0)
-        conv1 = self.encoderlayer_1(pool0)
+        conv1 = self.encoderlayer_1(pool0, mask=mask)
         pool1 = self.dowsample_1(conv1)
-        conv2 = self.encoderlayer_2(pool1)
+        conv2 = self.encoderlayer_2(pool1, mask=mask)
         pool2 = self.dowsample_2(conv2)
-        conv3 = self.encoderlayer_3(pool2)
+        conv3 = self.encoderlayer_3(pool2, mask=mask)
         pool3 = self.dowsample_3(conv3)
 
         # Bottleneck
-        conv4 = self.conv(pool3)
+        conv4 = self.conv(pool3, mask=mask)
 
         # Decoder
         up0 = self.upsample_0(conv4)
-        deconv0 = self.decoderlayer_0(up0,attn_kv=conv3)
+        deconv0 = self.decoderlayer_0(up0,attn_kv=conv3, mask=mask)
 
         up1 = self.upsample_1(deconv0)
-        deconv1 = self.decoderlayer_1(up1,attn_kv=conv2)
+        deconv1 = self.decoderlayer_1(up1,attn_kv=conv2, mask=mask)
 
         up2 = self.upsample_2(deconv1)
-        deconv2 = self.decoderlayer_2(up2,attn_kv=conv1)
+        deconv2 = self.decoderlayer_2(up2,attn_kv=conv1, mask=mask)
 
         up3 = self.upsample_3(deconv2)
-        deconv3 = self.decoderlayer_3(up3,attn_kv=conv0)
+        deconv3 = self.decoderlayer_3(up3,attn_kv=conv0, mask=mask)
 
         # Output Projection
         y = self.output_proj(deconv3)
@@ -1542,35 +1537,35 @@ class Uformer_CatCross(nn.Module):
     def extra_repr(self) -> str:
         return f"embed_dim={self.embed_dim}, token_projection={self.token_projection}, token_mlp={self.mlp},win_size={self.win_size}"
 
-    def forward(self, x):
+    def forward(self, x, mask=None):
         # Input Projection
         y = self.input_proj(x)
         y = self.pos_drop(y)
         # Encoder
-        conv0 = self.encoderlayer_0(y)
+        conv0 = self.encoderlayer_0(y, mask=mask)
         pool0 = self.dowsample_0(conv0)
-        conv1 = self.encoderlayer_1(pool0)
+        conv1 = self.encoderlayer_1(pool0, mask=mask)
         pool1 = self.dowsample_1(conv1)
-        conv2 = self.encoderlayer_2(pool1)
+        conv2 = self.encoderlayer_2(pool1, mask=mask)
         pool2 = self.dowsample_2(conv2)
-        conv3 = self.encoderlayer_3(pool2)
+        conv3 = self.encoderlayer_3(pool2, mask=mask)
         pool3 = self.dowsample_3(conv3)
 
         # Bottleneck
-        conv4 = self.conv(pool3)
+        conv4 = self.conv(pool3, mask=mask)
 
         # Decoder
         up0 = self.upsample_0(conv4)
-        deconv0 = self.decoderlayer_0(up0,attn_kv=conv3)
+        deconv0 = self.decoderlayer_0(up0,attn_kv=conv3,mask=mask)
 
         up1 = self.upsample_1(deconv0)
-        deconv1 = self.decoderlayer_1(up1,attn_kv=conv2)
+        deconv1 = self.decoderlayer_1(up1,attn_kv=conv2,mask=mask)
 
         up2 = self.upsample_2(deconv1)
-        deconv2 = self.decoderlayer_2(up2,attn_kv=conv1)
+        deconv2 = self.decoderlayer_2(up2,attn_kv=conv1,mask=mask)
 
         up3 = self.upsample_3(deconv2)
-        deconv3 = self.decoderlayer_3(up3,attn_kv=conv0)
+        deconv3 = self.decoderlayer_3(up3,attn_kv=conv0,mask=mask)
 
         # Output Projection
         y = self.output_proj(deconv3)
