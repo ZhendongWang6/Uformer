@@ -504,25 +504,36 @@ class LeWinTransformerBlock(nn.Module):
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
 
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
-            
-            if mask != None:
-                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
-
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        ## input mask
+        if mask != None:
+            input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
-            if mask != None:
-                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-                attn_mask = window_partition(attn_mask, self.win_size)
-                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
-                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
-            else:
-                attn_mask = None
+            attn_mask = None
+
+        ## shift mask
+        if self.shift_size > 0:
+            # calculate attention mask for SW-MSA
+            shift_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            h_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            w_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            cnt = 0
+            for h in h_slices:
+                for w in w_slices:
+                    shift_mask[:, h, w, :] = cnt
+                    cnt += 1
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            attn_mask = attn_mask or shift_attn_mask
+            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
             
         shortcut = x
         x = self.norm1(x)
@@ -600,25 +611,36 @@ class LeWinTransformer_Cross(nn.Module):
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
 
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
-            
-            if mask != None:
-                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
-
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        ## input mask
+        if mask != None:
+            input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
-            if mask != None:
-                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-                attn_mask = window_partition(attn_mask, self.win_size)
-                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
-                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
-            else:
-                attn_mask = None
+            attn_mask = None
+
+        ## shift mask
+        if self.shift_size > 0:
+            # calculate attention mask for SW-MSA
+            shift_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            h_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            w_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            cnt = 0
+            for h in h_slices:
+                for w in w_slices:
+                    shift_mask[:, h, w, :] = cnt
+                    cnt += 1
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            attn_mask = attn_mask or shift_attn_mask
+            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
@@ -709,25 +731,36 @@ class LeWinTransformer_CatCross(nn.Module):
         H = int(math.sqrt(L))
         W = int(math.sqrt(L))
 
-        if self.shift_size > 0:
-            # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, H, W, 1)).type_as(x)
-            
-            if mask != None:
-                img_mask = img_mask + F.interpolate(mask, size=(H,W)).permute(0,2,3,1)  # 1 H W 1
-
-            mask_windows = window_partition(img_mask, self.win_size)  # nW, window_size, window_size, 1
-            mask_windows = mask_windows.view(-1, self.win_size * self.win_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        ## input mask
+        if mask != None:
+            input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
-            if mask != None:
-                attn_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-                attn_mask = window_partition(attn_mask, self.win_size)
-                attn_mask = attn_mask.view(-1, self.win_size * self.win_size).unsqueeze(1)
-                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0))
-            else:
-                attn_mask = None
+            attn_mask = None
+
+        ## shift mask
+        if self.shift_size > 0:
+            # calculate attention mask for SW-MSA
+            shift_mask = torch.zeros((1, H, W, 1)).type_as(x)
+            h_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            w_slices = (slice(0, -self.win_size),
+                        slice(-self.win_size, -self.shift_size),
+                        slice(-self.shift_size, None))
+            cnt = 0
+            for h in h_slices:
+                for w in w_slices:
+                    shift_mask[:, h, w, :] = cnt
+                    cnt += 1
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            attn_mask = attn_mask or shift_attn_mask
+            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
