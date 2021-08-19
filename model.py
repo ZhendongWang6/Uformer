@@ -21,6 +21,8 @@ class ConvBlock(nn.Module):
     def __init__(self, in_channel, out_channel, strides=1):
         super(ConvBlock, self).__init__()
         self.strides = strides
+        self.in_channel=in_channel
+        self.out_channel=out_channel
         self.block = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, kernel_size=3, stride=strides, padding=1),
             nn.LeakyReLU(inplace=True),
@@ -35,11 +37,15 @@ class ConvBlock(nn.Module):
         out = out1 + out2
         return out
 
+    def flops(self, H, W): 
+        flops = H*W*self.in_channel*self.out_channel*(3*3+1)+H*W*self.out_channel*self.out_channel*3*3
+        return flops
 
 class UNet(nn.Module):
     def __init__(self, block=ConvBlock,dim=32):
         super(UNet, self).__init__()
 
+        self.dim = dim
         self.ConvBlock1 = ConvBlock(3, dim, strides=1)
         self.pool1 = nn.Conv2d(dim,dim,kernel_size=4, stride=2, padding=1)
 
@@ -104,6 +110,31 @@ class UNet(nn.Module):
 
         return out
 
+    def flops(self, H, W): 
+        flops = 0
+        flops += self.ConvBlock1.flops(H, W)
+        flops += H/2*W/2*self.dim*self.dim*4*4
+        flops += self.ConvBlock2.flops(H/2, W/2)
+        flops += H/4*W/4*self.dim*2*self.dim*2*4*4
+        flops += self.ConvBlock3.flops(H/4, W/4)
+        flops += H/8*W/8*self.dim*4*self.dim*4*4*4
+        flops += self.ConvBlock4.flops(H/8, W/8)
+        flops += H/16*W/16*self.dim*8*self.dim*8*4*4
+
+        flops += self.ConvBlock5.flops(H/16, W/16)
+
+        flops += H/8*W/8*self.dim*16*self.dim*8*2*2
+        flops += self.ConvBlock6.flops(H/8, W/8)
+        flops += H/4*W/4*self.dim*8*self.dim*4*2*2
+        flops += self.ConvBlock7.flops(H/4, W/4)
+        flops += H/2*W/2*self.dim*4*self.dim*2*2*2
+        flops += self.ConvBlock8.flops(H/2, W/2)
+        flops += H*W*self.dim*2*self.dim*2*2
+        flops += self.ConvBlock9.flops(H, W)
+
+        flops += H*W*self.dim*3*3*3
+        return flops
+
 #########################################
 class PosCNN(nn.Module):
     def __init__(self, in_chans, embed_dim=768, s=1):
@@ -165,12 +196,22 @@ class SepConv2d(torch.nn.Module):
                                          groups=in_channels)
         self.pointwise = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1)
         self.act_layer = act_layer() if act_layer is not None else nn.Identity()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.stride = stride
 
     def forward(self, x):
         x = self.depthwise(x)
         x = self.act_layer(x)
         x = self.pointwise(x)
         return x
+
+    def flops(self, H, W): 
+        flops = 0
+        flops += H*W*self.in_channels*self.kernel_size**2/self.stride**2
+        flops += H*W*self.in_channels*self.out_channels
+        return flops
 
 #########################################
 ######## Embedding for q,k,v ########
@@ -204,6 +245,13 @@ class ConvProjection(nn.Module):
         k = rearrange(k, 'b (h d) l w -> b h (l w) d', h=h)
         v = rearrange(v, 'b (h d) l w -> b h (l w) d', h=h)
         return q,k,v    
+    
+    def flops(self, H, W): 
+        flops = 0
+        flops += self.to_q.flops(H, W)
+        flops += self.to_k.flops(H, W)
+        flops += self.to_v.flops(H, W)
+        return flops
 
 class LinearProjection(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0., bias=True):
@@ -212,6 +260,8 @@ class LinearProjection(nn.Module):
         self.heads = heads
         self.to_q = nn.Linear(dim, inner_dim, bias = bias)
         self.to_kv = nn.Linear(dim, inner_dim * 2, bias = bias)
+        self.dim = dim
+        self.inner_dim = inner_dim
 
     def forward(self, x, attn_kv=None):
         B_, N, C = x.shape
@@ -222,6 +272,10 @@ class LinearProjection(nn.Module):
         k, v = kv[0], kv[1] 
         return q,k,v
 
+    def flops(self, H, W): 
+        flops = H*W*self.dim*self.inner_dim*3
+        return flops 
+
 class LinearProjection_Concat_kv(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0., bias=True):
         super().__init__()
@@ -229,6 +283,8 @@ class LinearProjection_Concat_kv(nn.Module):
         self.heads = heads
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias = bias)
         self.to_kv = nn.Linear(dim, inner_dim * 2, bias = bias)
+        self.dim = dim
+        self.inner_dim = inner_dim
 
     def forward(self, x, attn_kv=None):
         B_, N, C = x.shape
@@ -240,6 +296,10 @@ class LinearProjection_Concat_kv(nn.Module):
         k = torch.cat((k_d,k_e),dim=2)
         v = torch.cat((v_d,v_e),dim=2)
         return q,k,v
+
+    def flops(self, H, W): 
+        flops = H*W*self.dim*self.inner_dim*5
+        return flops 
 
 #########################################
 ########### window-based self-attention #############
@@ -278,6 +338,7 @@ class WindowAttention(nn.Module):
         else:
             self.qkv = LinearProjection(dim,num_heads,dim//num_heads,bias=qkv_bias)
         
+        self.token_projection = token_projection
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.se_layer = SELayer(dim) if se_layer else nn.Identity()
@@ -320,6 +381,29 @@ class WindowAttention(nn.Module):
     def extra_repr(self) -> str:
         return f'dim={self.dim}, win_size={self.win_size}, num_heads={self.num_heads}'
 
+    def flops(self, H, W):
+        # calculate flops for 1 window with token length of N
+        # print(N, self.dim)
+        flops = 0
+        N = self.win_size[0]*self.win_size[1]
+        nW = H*W/N
+        # qkv = self.qkv(x)
+        # flops += N * self.dim * 3 * self.dim
+        flops += self.qkv.flops(H, W)
+        # attn = (q @ k.transpose(-2, -1))
+        if self.token_projection !='linear_concat':
+            flops += nW * self.num_heads * N * (self.dim // self.num_heads) * N
+            #  x = (attn @ v)
+            flops += nW * self.num_heads * N * N * (self.dim // self.num_heads)
+        else:
+            flops += nW * self.num_heads * N * (self.dim // self.num_heads) * N*2
+            #  x = (attn @ v)
+            flops += nW * self.num_heads * N * N*2 * (self.dim // self.num_heads)
+        # x = self.proj(x)
+        flops += nW * N * self.dim * self.dim
+        print("W-MSA:{%.2f}"%(flops/1e9))
+        return flops
+
 #########################################
 ########### feed-forward network #############
 class Mlp(nn.Module):
@@ -331,6 +415,9 @@ class Mlp(nn.Module):
         self.act = act_layer()
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
+        self.in_features = in_features
+        self.hidden_features = hidden_features
+        self.out_features = out_features
 
     def forward(self, x):
         x = self.fc1(x)
@@ -340,6 +427,15 @@ class Mlp(nn.Module):
         x = self.drop(x)
         return x
 
+    def flops(self, H, W):
+        flops = 0
+        # fc1
+        flops += H*W*self.in_features*self.hidden_features 
+        # fc2
+        flops += H*W*self.hidden_features*self.out_features
+        print("MLP:{%.2f}"%(flops/1e9))
+        return flops
+
 class LeFF(nn.Module):
     def __init__(self, dim=32, hidden_dim=128, act_layer=nn.GELU,drop = 0.):
         super().__init__()
@@ -348,7 +444,8 @@ class LeFF(nn.Module):
         self.dwconv = nn.Sequential(nn.Conv2d(hidden_dim,hidden_dim,groups=hidden_dim,kernel_size=3,stride=1,padding=1),
                         act_layer())
         self.linear2 = nn.Sequential(nn.Linear(hidden_dim, dim))
-
+        self.dim = dim
+        self.hidden_dim = hidden_dim
 
     def forward(self, x):
         # bs x hw x c
@@ -370,20 +467,41 @@ class LeFF(nn.Module):
 
         return x
 
-
+    def flops(self, H, W):
+        flops = 0
+        # fc1
+        flops += H*W*self.dim*self.hidden_dim 
+        # dwconv
+        flops += H*W*self.hidden_dim*3*3
+        # fc2
+        flops += H*W*self.hidden_dim*self.dim
+        print("LeFF:{%.2f}"%(flops/1e9))
+        return flops
 
 #########################################
 ########### window operation#############
-def window_partition(x, win_size):
+def window_partition(x, win_size, dilation_rate=1):
     B, H, W, C = x.shape
-    x = x.view(B, H // win_size, win_size, W // win_size, win_size, C)
-    windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, win_size, win_size, C)
+    if dilation_rate !=1:
+        x = x.permute(0,3,1,2) # B, C, H, W
+        assert type(dilation_rate) is int, 'dilation_rate should be a int'
+        x = F.unfold(x, kernel_size=win_size,dilation=dilation_rate,padding=4*(dilation_rate-1),stride=win_size) # B, C*Wh*Ww, H/Wh*W/Ww
+        windows = x.permute(0,2,1).contiguous().view(-1, C, win_size, win_size) # B' ,C ,Wh ,Ww
+        windows = windows.permute(0,2,3,1).contiguous() # B' ,Wh ,Ww ,C
+    else:
+        x = x.view(B, H // win_size, win_size, W // win_size, win_size, C)
+        windows = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, win_size, win_size, C) # B' ,Wh ,Ww ,C
     return windows
 
-def window_reverse(windows, win_size, H, W):
+def window_reverse(windows, win_size, H, W, dilation_rate=1):
+    # B' ,Wh ,Ww ,C
     B = int(windows.shape[0] / (H * W / win_size / win_size))
     x = windows.view(B, H // win_size, W // win_size, win_size, win_size, -1)
-    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
+    if dilation_rate !=1:
+        x = windows.permute(0,5,3,4,1,2).contiguous() # B, C*Wh*Ww, H/Wh*W/Ww
+        x = F.fold(x, (H, W), kernel_size=win_size, dilation=dilation_rate, padding=4*(dilation_rate-1),stride=win_size)
+    else:
+        x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(B, H, W, -1)
     return x
 
 #########################################
@@ -393,8 +511,9 @@ class Downsample(nn.Module):
         super(Downsample, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channel, out_channel, kernel_size=4, stride=2, padding=1),
-
         )
+        self.in_channel = in_channel
+        self.out_channel = out_channel
 
     def forward(self, x):
         B, L, C = x.shape
@@ -405,6 +524,13 @@ class Downsample(nn.Module):
         out = self.conv(x).flatten(2).transpose(1,2).contiguous()  # B H*W C
         return out
 
+    def flops(self, H, W):
+        flops = 0
+        # conv
+        flops += H/2*W/2*self.in_channel*self.out_channel*4*4
+        print("Downsample:{%.2f}"%(flops/1e9))
+        return flops
+
 # Upsample Block
 class Upsample(nn.Module):
     def __init__(self, in_channel, out_channel):
@@ -412,7 +538,9 @@ class Upsample(nn.Module):
         self.deconv = nn.Sequential(
             nn.ConvTranspose2d(in_channel, out_channel, kernel_size=2, stride=2),
         )
-
+        self.in_channel = in_channel
+        self.out_channel = out_channel
+        
     def forward(self, x):
         B, L, C = x.shape
         H = int(math.sqrt(L))
@@ -420,6 +548,13 @@ class Upsample(nn.Module):
         x = x.transpose(1, 2).contiguous().view(B, C, H, W)
         out = self.deconv(x).flatten(2).transpose(1,2).contiguous() # B H*W C
         return out
+
+    def flops(self, H, W):
+        flops = 0
+        # conv
+        flops += H*2*W*2*self.in_channel*self.out_channel*2*2 
+        print("Upsample:{%.2f}"%(flops/1e9))
+        return flops
 
 # Input Projection
 class InputProj(nn.Module):
@@ -433,6 +568,8 @@ class InputProj(nn.Module):
             self.norm = norm_layer(out_channel)
         else:
             self.norm = None
+        self.in_channel = in_channel
+        self.out_channel = out_channel
 
     def forward(self, x):
         B, C, H, W = x.shape
@@ -440,6 +577,16 @@ class InputProj(nn.Module):
         if self.norm is not None:
             x = self.norm(x)
         return x
+
+    def flops(self, H, W):
+        flops = 0
+        # conv
+        flops += H*W*self.in_channel*self.out_channel*3*3
+
+        if self.norm is not None:
+            flops += H*W*self.out_channel 
+        print("Input_proj:{%.2f}"%(flops/1e9))
+        return flops
 
 # Output Projection
 class OutputProj(nn.Module):
@@ -454,6 +601,8 @@ class OutputProj(nn.Module):
             self.norm = norm_layer(out_channel)
         else:
             self.norm = None
+        self.in_channel = in_channel
+        self.out_channel = out_channel
 
     def forward(self, x):
         B, L, C = x.shape
@@ -464,6 +613,16 @@ class OutputProj(nn.Module):
         if self.norm is not None:
             x = self.norm(x)
         return x
+
+    def flops(self, H, W):
+        flops = 0
+        # conv
+        flops += H*W*self.in_channel*self.out_channel*3*3
+
+        if self.norm is not None:
+            flops += H*W*self.out_channel 
+        print("Output_proj:{%.2f}"%(flops/1e9))
+        return flops
 
 #########################################
 ########### LeWinTransformer #############
@@ -478,6 +637,7 @@ class LeWinTransformerBlock(nn.Module):
         self.win_size = win_size
         self.shift_size = shift_size
         self.mlp_ratio = mlp_ratio
+        self.token_mlp = token_mlp
         if min(self.input_resolution) <= self.win_size:
             self.shift_size = 0
             self.win_size = min(self.input_resolution)
@@ -507,9 +667,9 @@ class LeWinTransformerBlock(nn.Module):
         ## input mask
         if mask != None:
             input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
-            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
@@ -529,9 +689,9 @@ class LeWinTransformerBlock(nn.Module):
                 for w in w_slices:
                     shift_mask[:, h, w, :] = cnt
                     cnt += 1
-            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
-            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask or shift_attn_mask
             attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
             
@@ -546,7 +706,7 @@ class LeWinTransformerBlock(nn.Module):
             shifted_x = x
 
         # partition windows
-        x_windows = window_partition(shifted_x, self.win_size)  # nW*B, win_size, win_size, C
+        x_windows = window_partition(shifted_x, self.win_size)  # nW*B, win_size, win_size, C  N*C->C
         x_windows = x_windows.view(-1, self.win_size * self.win_size, C)  # nW*B, win_size*win_size, C
 
         # W-MSA/SW-MSA
@@ -568,6 +728,20 @@ class LeWinTransformerBlock(nn.Module):
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         del attn_mask
         return x
+
+    def flops(self):
+        flops = 0
+        H, W = self.input_resolution
+        # norm1
+        flops += self.dim * H * W
+        # W-MSA/SW-MSA
+        flops += self.attn.flops(H, W)
+        # norm2
+        flops += self.dim * H * W
+        # mlp
+        flops += self.mlp.flops(H,W)
+        print("LeWin:{%.2f}"%(flops/1e9))
+        return flops
 
 ########### LeWinTransformer_Cross #############
 class LeWinTransformer_Cross(nn.Module):
@@ -614,9 +788,9 @@ class LeWinTransformer_Cross(nn.Module):
         ## input mask
         if mask != None:
             input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
-            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
@@ -636,9 +810,9 @@ class LeWinTransformer_Cross(nn.Module):
                 for w in w_slices:
                     shift_mask[:, h, w, :] = cnt
                     cnt += 1
-            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
-            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask or shift_attn_mask
             attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
         
@@ -693,6 +867,21 @@ class LeWinTransformer_Cross(nn.Module):
         del attn_mask
         return x
 
+    def flops(self):
+        flops = 0
+        H, W = self.input_resolution
+        # norm1
+        flops += self.dim * H * W
+        # W-MSA/SW-MSA
+        flops += self.attn.flops(H, W)
+        flops += self.cross_attn.flops(H, W)
+        # norm2
+        flops += self.dim * H * W
+        # mlp
+        flops += self.mlp.flops(H,W)
+        print("LeWin:{%.2f}"%(flops/1e9))
+        return flops
+
 ########### LeWinTransformer_CatCross #############
 class LeWinTransformer_CatCross(nn.Module):
     def __init__(self, dim, input_resolution, num_heads, win_size=8, shift_size=0,
@@ -734,9 +923,9 @@ class LeWinTransformer_CatCross(nn.Module):
         ## input mask
         if mask != None:
             input_mask = F.interpolate(mask, size=(H,W)).permute(0,2,3,1)
-            input_mask_windows = window_partition(input_mask, self.win_size) # nW, window_size, window_size, 1
-            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, window_size*window_size, window_size*window_size
+            input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
+            attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
@@ -756,9 +945,9 @@ class LeWinTransformer_CatCross(nn.Module):
                 for w in w_slices:
                     shift_mask[:, h, w, :] = cnt
                     cnt += 1
-            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, window_size, window_size, 1
-            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, window_size*window_size
-            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, window_size*window_size, window_size*window_size
+            shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
+            shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
+            shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
             attn_mask = attn_mask or shift_attn_mask
             attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
         
@@ -805,6 +994,19 @@ class LeWinTransformer_CatCross(nn.Module):
         del attn_mask
         return x
 
+    def flops(self):
+        flops = 0
+        H, W = self.input_resolution
+        # norm1
+        flops += self.dim * H * W
+        # W-MSA/SW-MSA
+        flops += self.cross_attn.flops(H, W)
+        # norm2
+        flops += self.dim * H * W
+        # mlp
+        flops += self.mlp.flops(H,W)
+        print("LeWin:{%.2f}"%(flops/1e9))
+        return flops
 
 #########################################
 ########### Basic layer of Uformer ################
@@ -842,6 +1044,12 @@ class BasicUformerLayer(nn.Module):
                 x = blk(x,mask)
         return x
 
+    def flops(self):
+        flops = 0
+        for blk in self.blocks:
+            flops += blk.flops()
+        return flops
+
 ########### Basic decoderlayer of Uformer_Cross ################
 class CrossUformerLayer(nn.Module):
     def __init__(self, dim, output_dim, input_resolution, depth, num_heads, win_size,
@@ -877,6 +1085,12 @@ class CrossUformerLayer(nn.Module):
             else:
                 x = blk(x,attn_kv,mask)
         return x 
+
+    def flops(self):
+        flops = 0
+        for blk in self.blocks:
+            flops += blk.flops()
+        return flops
 
 ########### Basic decoderlayer of Uformer_CatCross ################
 class CatCrossUformerLayer(nn.Module):
@@ -914,6 +1128,11 @@ class CatCrossUformerLayer(nn.Module):
                 x = blk(x,attn_kv, mask)
         return x 
 
+    def flops(self):
+        flops = 0
+        for blk in self.blocks:
+            flops += blk.flops()
+        return flops
 
 class Uformer(nn.Module):
     def __init__(self, img_size=128, in_chans=3,
@@ -933,7 +1152,7 @@ class Uformer(nn.Module):
         self.token_projection = token_projection
         self.mlp = token_mlp
         self.win_size =win_size
-        
+        self.reso = img_size
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         # stochastic depth
@@ -1147,6 +1366,29 @@ class Uformer(nn.Module):
         y = self.output_proj(deconv3)
         return x + y
 
+    def flops(self):
+        flops = 0
+        # Input Projection
+        flops += self.input_proj.flops(self.reso,self.reso)
+        # Encoder
+        flops += self.encoderlayer_0.flops()+self.dowsample_0.flops(self.reso,self.reso)
+        flops += self.encoderlayer_1.flops()+self.dowsample_1.flops(self.reso//2,self.reso//2)
+        flops += self.encoderlayer_2.flops()+self.dowsample_2.flops(self.reso//2**2,self.reso//2**2)
+        flops += self.encoderlayer_3.flops()+self.dowsample_3.flops(self.reso//2**3,self.reso//2**3)
+
+        # Bottleneck
+        flops += self.conv.flops()
+
+        # Decoder
+        flops += self.upsample_0.flops(self.reso//2**4,self.reso//2**4)+self.decoderlayer_0.flops()
+        flops += self.upsample_1.flops(self.reso//2**3,self.reso//2**3)+self.decoderlayer_1.flops()
+        flops += self.upsample_2.flops(self.reso//2**2,self.reso//2**2)+self.decoderlayer_2.flops()
+        flops += self.upsample_3.flops(self.reso//2,self.reso//2)+self.decoderlayer_3.flops()
+        
+        # Output Projection
+        flops += self.output_proj.flops(self.reso,self.reso)
+        return flops
+
 class Uformer_Cross(nn.Module):
     def __init__(self, img_size=128, in_chans=3,
                  embed_dim=32, depths=[2, 2, 2, 2, 2, 2, 2, 2, 2], num_heads=[1, 2, 4, 8, 16, 8, 4, 2, 1],
@@ -1165,7 +1407,7 @@ class Uformer_Cross(nn.Module):
         self.token_projection = token_projection
         self.mlp = token_mlp
         self.win_size =win_size
-
+        self.reso = img_size
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         # stochastic depth
@@ -1376,6 +1618,29 @@ class Uformer_Cross(nn.Module):
         y = self.output_proj(deconv3)
         return x + y
 
+    def flops(self):
+        flops = 0
+        # Input Projection
+        flops += self.input_proj.flops(self.reso,self.reso)
+        # Encoder
+        flops += self.encoderlayer_0.flops()+self.dowsample_0.flops(self.reso,self.reso)
+        flops += self.encoderlayer_1.flops()+self.dowsample_1.flops(self.reso//2,self.reso//2)
+        flops += self.encoderlayer_2.flops()+self.dowsample_2.flops(self.reso//2**2,self.reso//2**2)
+        flops += self.encoderlayer_3.flops()+self.dowsample_3.flops(self.reso//2**3,self.reso//2**3)
+
+        # Bottleneck
+        flops += self.conv.flops()
+
+        # Decoder
+        flops += self.upsample_0.flops(self.reso//2**4,self.reso//2**4)+self.decoderlayer_0.flops()
+        flops += self.upsample_1.flops(self.reso//2**3,self.reso//2**3)+self.decoderlayer_1.flops()
+        flops += self.upsample_2.flops(self.reso//2**2,self.reso//2**2)+self.decoderlayer_2.flops()
+        flops += self.upsample_3.flops(self.reso//2,self.reso//2)+self.decoderlayer_3.flops()
+        
+        # Output Projection
+        flops += self.output_proj.flops(self.reso,self.reso)
+        return flops
+        
 class Uformer_CatCross(nn.Module):
     def __init__(self, img_size=128, in_chans=3,
                  embed_dim=32, depths=[2, 2, 2, 2, 2, 2, 2, 2, 2], num_heads=[1, 2, 4, 8, 16, 8, 4, 2, 1],
@@ -1394,7 +1659,7 @@ class Uformer_CatCross(nn.Module):
         self.token_projection = token_projection
         self.mlp = token_mlp
         self.win_size =win_size
-
+        self.reso = img_size
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         # stochastic depth
@@ -1603,3 +1868,364 @@ class Uformer_CatCross(nn.Module):
         # Output Projection
         y = self.output_proj(deconv3)
         return x + y
+
+    def flops(self):
+        flops = 0
+        # Input Projection
+        flops += self.input_proj.flops(self.reso,self.reso)
+        # Encoder
+        flops += self.encoderlayer_0.flops()+self.dowsample_0.flops(self.reso,self.reso)
+        flops += self.encoderlayer_1.flops()+self.dowsample_1.flops(self.reso//2,self.reso//2)
+        flops += self.encoderlayer_2.flops()+self.dowsample_2.flops(self.reso//2**2,self.reso//2**2)
+        flops += self.encoderlayer_3.flops()+self.dowsample_3.flops(self.reso//2**3,self.reso//2**3)
+
+        # Bottleneck
+        flops += self.conv.flops()
+
+        # Decoder
+        flops += self.upsample_0.flops(self.reso//2**4,self.reso//2**4)+self.decoderlayer_0.flops()
+        flops += self.upsample_1.flops(self.reso//2**3,self.reso//2**3)+self.decoderlayer_1.flops()
+        flops += self.upsample_2.flops(self.reso//2**2,self.reso//2**2)+self.decoderlayer_2.flops()
+        flops += self.upsample_3.flops(self.reso//2,self.reso//2)+self.decoderlayer_3.flops()
+        
+        # Output Projection
+        flops += self.output_proj.flops(self.reso,self.reso)
+        return flops
+# class LeWinformer(nn.Module):
+#     def __init__(self, img_size=128, in_chans=3,
+#                  embed_dim=32, depth=12,
+#                  win_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+#                  drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
+#                  norm_layer=nn.LayerNorm, patch_norm=True,
+#                  use_checkpoint=False, token_projection='linear', token_mlp='ffn', se_layer=False,**kwargs):
+#         super().__init__()
+
+#         self.transformer_layers = nn.ModuleList([])
+#         self.embed_dim = embed_dim
+#         self.num_heads = embed_dim//32 or 1
+#         self.patch_norm = patch_norm
+#         self.mlp_ratio = mlp_ratio
+#         self.token_projection = token_projection
+#         self.mlp = token_mlp
+#         self.win_size =win_size
+        
+#         self.pos_drop = nn.Dropout(p=drop_rate)
+
+#         # stochastic depth
+#         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)] 
+
+#         # build layers
+
+#         # Input/Output
+#         self.input_proj = InputProj(in_channel=in_chans, out_channel=embed_dim, kernel_size=3, stride=1, act_layer=nn.LeakyReLU)
+#         self.output_proj = OutputProj(in_channel=embed_dim, out_channel=in_chans, kernel_size=3, stride=1)
+        
+#         # LeWin Transformer
+#         for i in range(depth):
+#             dim = embed_dim
+#             self.transformer_layers.append(nn.ModuleList([BasicUformerLayer(dim=dim,
+#                             output_dim=embed_dim,
+#                             input_resolution=(img_size,
+#                                                 img_size),
+#                             depth=1,
+#                             num_heads=self.num_heads,
+#                             win_size=win_size,
+#                             mlp_ratio=self.mlp_ratio,
+#                             qkv_bias=qkv_bias, qk_scale=qk_scale,
+#                             drop=drop_rate, attn_drop=attn_drop_rate,
+#                             drop_path=dpr[i],
+#                             norm_layer=norm_layer,
+#                             use_checkpoint=use_checkpoint,
+#                             token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer),
+#                 Downsample()
+#             ]))
+
+#         self.apply(self._init_weights)
+
+#     def _init_weights(self, m):
+#         if isinstance(m, nn.Linear):
+#             trunc_normal_(m.weight, std=.02)
+#             if isinstance(m, nn.Linear) and m.bias is not None:
+#                 nn.init.constant_(m.bias, 0)
+#         elif isinstance(m, nn.LayerNorm):
+#             nn.init.constant_(m.bias, 0)
+#             nn.init.constant_(m.weight, 1.0)
+
+#     @torch.jit.ignore
+#     def no_weight_decay(self):
+#         return {'absolute_pos_embed'}
+
+#     @torch.jit.ignore
+#     def no_weight_decay_keywords(self):
+#         return {'relative_position_bias_table'}
+
+#     def extra_repr(self) -> str:
+#         return f"embed_dim={self.embed_dim}, token_projection={self.token_projection}, token_mlp={self.mlp},win_size={self.win_size}"
+
+#     def forward(self, x, mask=None):
+#         # Input Projection
+#         y = self.input_proj(x)
+#         y = self.pos_drop(y)
+#         #Encoder
+#         for lewin in self.transformer_layers:
+#             y = lewin(y)
+
+#         # Output Projection
+#         y = self.output_proj(y)
+#         return x + y
+
+### single-scale Uformer is computationally too costly.
+class Uformer_singlescale(nn.Module):
+    def __init__(self, img_size=128, in_chans=3,
+                 embed_dim=32, depths=[2, 2, 2, 2, 2, 2, 2, 2, 2], num_heads=[1, 2, 4, 8, 16, 16, 8, 4, 2],
+                 win_size=8, mlp_ratio=4., qkv_bias=True, qk_scale=None,
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.1,
+                 norm_layer=nn.LayerNorm, patch_norm=True,
+                 use_checkpoint=False, token_projection='linear', token_mlp='ffn', se_layer=False,
+                 downsample=Downsample, upsample=Upsample, **kwargs):
+        super().__init__()
+
+        self.num_enc_layers = len(depths)//2
+        self.num_dec_layers = len(depths)//2
+        self.embed_dim = embed_dim
+        self.patch_norm = patch_norm
+        self.mlp_ratio = mlp_ratio
+        self.token_projection = token_projection
+        self.mlp = token_mlp
+        self.win_size =win_size
+        
+        self.pos_drop = nn.Dropout(p=drop_rate)
+
+        # stochastic depth
+        enc_dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths[:self.num_enc_layers]))] 
+        conv_dpr = [drop_path_rate]*depths[4]
+        dec_dpr = enc_dpr[::-1]
+
+        # build layers
+
+        # Input/Output
+        self.input_proj = InputProj(in_channel=in_chans, out_channel=embed_dim, kernel_size=3, stride=1, act_layer=nn.LeakyReLU)
+        self.output_proj = OutputProj(in_channel=2*embed_dim, out_channel=in_chans, kernel_size=3, stride=1)
+        
+        # Encoder
+        self.encoderlayer_0 = BasicUformerLayer(dim=embed_dim,
+                            output_dim=embed_dim,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[0],
+                            num_heads=num_heads[0],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=enc_dpr[sum(depths[:0]):sum(depths[:1])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.downsample_0 = downsample(embed_dim, embed_dim*2,downsample=False)
+        self.encoderlayer_1 = BasicUformerLayer(dim=embed_dim*2,
+                            output_dim=embed_dim*2,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[1],
+                            num_heads=num_heads[1],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=enc_dpr[sum(depths[:1]):sum(depths[:2])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.downsample_1 = downsample(embed_dim*2, embed_dim*4,downsample=False)
+        self.encoderlayer_2 = BasicUformerLayer(dim=embed_dim*4,
+                            output_dim=embed_dim*4,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[2],
+                            num_heads=num_heads[2],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=enc_dpr[sum(depths[:2]):sum(depths[:3])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.downsample_2 = downsample(embed_dim*4, embed_dim*8,downsample=False)
+        self.encoderlayer_3 = BasicUformerLayer(dim=embed_dim*8,
+                            output_dim=embed_dim*8,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[3],
+                            num_heads=num_heads[3],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=enc_dpr[sum(depths[:3]):sum(depths[:4])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.downsample_3 = downsample(embed_dim*8, embed_dim*16,downsample=False)
+
+        # Bottleneck
+        self.conv = BasicUformerLayer(dim=embed_dim*16,
+                            output_dim=embed_dim*16,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[4],
+                            num_heads=num_heads[4],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=conv_dpr,
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+
+        # Decoder
+        self.upsample_0 = upsample(embed_dim*16, embed_dim*8,upsample=False)
+        self.decoderlayer_0 = BasicUformerLayer(dim=embed_dim*16,
+                            output_dim=embed_dim*16,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[5],
+                            num_heads=num_heads[5],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=dec_dpr[:depths[5]],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.upsample_1 = upsample(embed_dim*16, embed_dim*4,upsample=False)
+        self.decoderlayer_1 = BasicUformerLayer(dim=embed_dim*8,
+                            output_dim=embed_dim*8,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[6],
+                            num_heads=num_heads[6],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=dec_dpr[sum(depths[5:6]):sum(depths[5:7])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.upsample_2 = upsample(embed_dim*8, embed_dim*2,upsample=False)
+        self.decoderlayer_2 = BasicUformerLayer(dim=embed_dim*4,
+                            output_dim=embed_dim*4,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[7],
+                            num_heads=num_heads[7],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=dec_dpr[sum(depths[5:7]):sum(depths[5:8])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+        self.upsample_3 = upsample(embed_dim*4, embed_dim,upsample=False)
+        self.decoderlayer_3 = BasicUformerLayer(dim=embed_dim*2,
+                            output_dim=embed_dim*2,
+                            input_resolution=(img_size,
+                                                img_size),
+                            depth=depths[8],
+                            num_heads=num_heads[8],
+                            win_size=win_size,
+                            mlp_ratio=self.mlp_ratio,
+                            qkv_bias=qkv_bias, qk_scale=qk_scale,
+                            drop=drop_rate, attn_drop=attn_drop_rate,
+                            drop_path=dec_dpr[sum(depths[5:8]):sum(depths[5:9])],
+                            norm_layer=norm_layer,
+                            use_checkpoint=use_checkpoint,
+                            token_projection=token_projection,token_mlp=token_mlp,se_layer=se_layer)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {'absolute_pos_embed'}
+
+    @torch.jit.ignore
+    def no_weight_decay_keywords(self):
+        return {'relative_position_bias_table'}
+
+    def extra_repr(self) -> str:
+        return f"embed_dim={self.embed_dim}, token_projection={self.token_projection}, token_mlp={self.mlp},win_size={self.win_size}"
+
+    def forward(self, x, mask=None):
+        # Input Projection
+        y = self.input_proj(x)
+        y = self.pos_drop(y)
+        #Encoder
+        conv0 = self.encoderlayer_0(y,mask=mask)
+        pool0 = self.downsample_0(conv0)
+        conv1 = self.encoderlayer_1(pool0,mask=mask)
+        pool1 = self.downsample_1(conv1)
+        conv2 = self.encoderlayer_2(pool1,mask=mask)
+        pool2 = self.downsample_2(conv2)
+        conv3 = self.encoderlayer_3(pool2,mask=mask)
+        pool3 = self.downsample_3(conv3)
+
+        # Bottleneck
+        conv4 = self.conv(pool3, mask=mask)
+
+        #Decoder
+        up0 = self.upsample_0(conv4)
+        deconv0 = torch.cat([up0,conv3],-1)
+        deconv0 = self.decoderlayer_0(deconv0,mask=mask)
+        
+        up1 = self.upsample_1(deconv0)
+        deconv1 = torch.cat([up1,conv2],-1)
+        deconv1 = self.decoderlayer_1(deconv1,mask=mask)
+
+        up2 = self.upsample_2(deconv1)
+        deconv2 = torch.cat([up2,conv1],-1)
+        deconv2 = self.decoderlayer_2(deconv2,mask=mask)
+
+        up3 = self.upsample_3(deconv2)
+        deconv3 = torch.cat([up3,conv0],-1)
+        deconv3 = self.decoderlayer_3(deconv3,mask=mask)
+
+        # Output Projection
+        y = self.output_proj(deconv3)
+        return x + y
+
+if __name__ == "__main__":
+    arch = Uformer
+    input_size = 256
+    # arch = Uformer_Cross
+    depths=[2, 2, 2, 2, 2, 2, 2, 2, 2]
+    # model_restoration = UNet(dim=32)
+    model_restoration = arch(img_size=input_size, embed_dim=44,depths=depths,
+                 win_size=8, mlp_ratio=4., qkv_bias=True,
+                 token_projection='linear', token_mlp='leff',
+                 downsample=Downsample, upsample=Upsample,se_layer=False)
+    # arch = LeWinformer    
+    # depth = 20
+    # model_restoration = arch(embed_dim=16,depth=depth,
+    #              win_size=8, mlp_ratio=4., qkv_bias=True,
+    #              token_projection='linear', token_mlp='leff',se_layer=False)         
+    # from ptflops import get_model_complexity_info
+    # macs, params = get_model_complexity_info(model_restoration, (3, input_size, input_size), as_strings=True,
+    #                                             print_per_layer_stat=True, verbose=True)
+    # print('{:<30}  {:<8}'.format('Computational complexity: ', macs))
+    # print('{:<30}  {:<8}'.format('Number of parameters: ', params))
+    # print("number of GFLOPs: %.2f G"%(model_restoration.flops(input_size,input_size) / 1e9))
+    print("number of GFLOPs: %.2f G"%(model_restoration.flops() / 1e9))
