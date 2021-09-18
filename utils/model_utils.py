@@ -61,15 +61,15 @@ def get_arch(opt):
     if arch == 'UNet':
         model_restoration = UNet(dim=opt.embed_dim)
     elif arch == 'Uformer':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_embed=opt.token_embed,token_mlp=opt.token_mlp)
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
     elif arch == 'Uformer16':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=16,win_size=8,token_embed='linear',token_mlp='leff')
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=16,win_size=8,token_projection='linear',token_mlp='leff')
     elif arch == 'Uformer32':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_embed='linear',token_mlp='leff')
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='leff')
     elif arch == 'Uformer_CatCross':
-        model_restoration = Uformer_CatCross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=8,token_embed=opt.token_embed,token_mlp=opt.token_mlp)
+        model_restoration = Uformer_CatCross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=8,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
     elif arch == 'Uformer_Cross':
-        model_restoration = Uformer_Cross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_embed=opt.token_embed,token_mlp=opt.token_mlp)
+        model_restoration = Uformer_Cross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
     else:
         raise Exception("Arch error!")
 
