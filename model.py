@@ -670,7 +670,7 @@ class LeWinTransformerBlock(nn.Module):
             input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
             attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(attn_mask!=0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
 
@@ -692,8 +692,8 @@ class LeWinTransformerBlock(nn.Module):
             shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
             shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask or shift_attn_mask
-            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
+            shift_attn_mask = shift_attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0)).masked_fill(shift_attn_mask == 0, float(0.0))
+            attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
             
         shortcut = x
         x = self.norm1(x)
@@ -791,7 +791,7 @@ class LeWinTransformer_Cross(nn.Module):
             input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
             attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(attn_mask!=0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
 
@@ -813,8 +813,8 @@ class LeWinTransformer_Cross(nn.Module):
             shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
             shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask or shift_attn_mask
-            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
+            shift_attn_mask = shift_attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0)).masked_fill(shift_attn_mask == 0, float(0.0))
+            attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
@@ -926,7 +926,7 @@ class LeWinTransformer_CatCross(nn.Module):
             input_mask_windows = window_partition(input_mask, self.win_size) # nW, win_size, win_size, 1
             attn_mask = input_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             attn_mask = attn_mask.unsqueeze(2)*attn_mask.unsqueeze(1) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+            attn_mask = attn_mask.masked_fill(attn_mask!=0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
         else:
             attn_mask = None
 
@@ -948,8 +948,8 @@ class LeWinTransformer_CatCross(nn.Module):
             shift_mask_windows = window_partition(shift_mask, self.win_size)  # nW, win_size, win_size, 1
             shift_mask_windows = shift_mask_windows.view(-1, self.win_size * self.win_size) # nW, win_size*win_size
             shift_attn_mask = shift_mask_windows.unsqueeze(1) - shift_mask_windows.unsqueeze(2) # nW, win_size*win_size, win_size*win_size
-            attn_mask = attn_mask or shift_attn_mask
-            attn_mask = attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0))
+            shift_attn_mask = shift_attn_mask.masked_fill(shift_attn_mask != 0, float(-100.0)).masked_fill(shift_attn_mask == 0, float(0.0))
+            attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
         
         attn_kv = attn_kv.view(B, H, W, C)
         # cyclic shift
