@@ -1,5 +1,5 @@
 # Uformer: A General U-Shaped Transformer for Image Restoration 
-<b>Zhendong Wang, Xiaodong Cun, Jianmin Bao and Jianzhuang Liu</b>
+<b>Zhendong Wang, <a href='https://vinthony.github.io'>Xiaodong Cun</a>, <a href='https://jianminbao.github.io/'>Jianmin Bao</a> and <a href='http://people.ucas.ac.cn/~jzliu?language=en'>Jianzhuang Liu</a> </b>
 
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-denoising-on-dnd)](https://paperswithcode.com/sota/image-denoising-on-dnd?p=uformer-a-general-u-shaped-transformer-for) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-denoising-on-sidd)](https://paperswithcode.com/sota/image-denoising-on-sidd?p=uformer-a-general-u-shaped-transformer-for)
 
@@ -8,6 +8,7 @@ Paper: https://arxiv.org/abs/2106.03106
 
 ### Update:
 
+* 2021.09.30 Release pre-trianed Uformer16 for SIDD denoising.
 * 2021.08.19 Release a pre-trained model(Uformer32)! Add a script for FLOP/GMAC calculation.
 * 2021.07.29 Add a script for testing the pre-trained model on the arbitrary-resolution images.
 
@@ -27,7 +28,7 @@ pip3 install -r requirements.txt
 ## Pretrained model
 
 - uformer32_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1dS7Lh46SMbncnwRW9zM5AW3cXrvYkjQU/view?usp=sharing): PSNR 39.77 dB.
-
+- uformer16_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1H1TKHw2gcKORC-MwSkBp9g93T4B1jh_b/view?usp=sharing): PSNR 39.65 dB.
 
 ## Data preparation 
 ### Denoising
