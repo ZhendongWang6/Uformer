@@ -7,7 +7,7 @@ Paper: https://arxiv.org/abs/2106.03106
 
 
 ### Update:
-
+* 2021.10.28 Release the results of Uformer32 on SIDD and DND.
 * 2021.09.30 Release pre-trianed Uformer16 for SIDD denoising.
 * 2021.08.19 Release a pre-trained model(Uformer32)! Add a script for FLOP/GMAC calculation.
 * 2021.07.29 Add a script for testing the pre-trained model on the arbitrary-resolution images.
@@ -29,6 +29,10 @@ pip3 install -r requirements.txt
 
 - uformer32_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1dS7Lh46SMbncnwRW9zM5AW3cXrvYkjQU/view?usp=sharing): PSNR 39.77 dB.
 - uformer16_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1H1TKHw2gcKORC-MwSkBp9g93T4B1jh_b/view?usp=sharing): PSNR 39.65 dB.
+
+## Results from the pretrained model
+- uformer32: [SIDD dataset](https://drive.google.com/file/d/19lohIfoaxXsWS3DtRtxLh1kl9Dm-ACd-/view?usp=sharing) |  [DND dataset](https://drive.google.com/file/d/1vdg0dp6Rpb623cPsJlXR3YjJu_C-Tap8/view?usp=sharing)
+
 
 ## Data preparation 
 ### Denoising
