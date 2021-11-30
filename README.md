@@ -1,14 +1,19 @@
 # Uformer: A General U-Shaped Transformer for Image Restoration 
-<b>Zhendong Wang, <a href='https://vinthony.github.io'>Xiaodong Cun</a>, <a href='https://jianminbao.github.io/'>Jianmin Bao</a> and <a href='http://people.ucas.ac.cn/~jzliu?language=en'>Jianzhuang Liu</a> </b>
+<b>Zhendong Wang, <a href='https://vinthony.github.io'>Xiaodong Cun</a>, <a href='https://jianminbao.github.io/'>Jianmin Bao</a>, <a href='http://staff.ustc.edu.cn/~zhwg/'>Wengang Zhou</a>, <a href='http://people.ucas.ac.cn/~jzliu?language=en'>Jianzhuang Liu</a>, <a href='http://staff.ustc.edu.cn/~lihq/en/'>Houqiang Li </a> </b>
 
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/deblurring-on-realblur-j-trained-on-gopro)](https://paperswithcode.com/sota/deblurring-on-realblur-j-trained-on-gopro?p=uformer-a-general-u-shaped-transformer-for) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/deblurring-on-realblur-r-trained-on-gopro)](https://paperswithcode.com/sota/deblurring-on-realblur-r-trained-on-gopro?p=uformer-a-general-u-shaped-transformer-for)	
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-denoising-on-dnd)](https://paperswithcode.com/sota/image-denoising-on-dnd?p=uformer-a-general-u-shaped-transformer-for) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-denoising-on-sidd)](https://paperswithcode.com/sota/image-denoising-on-sidd?p=uformer-a-general-u-shaped-transformer-for)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/deblurring-on-gopro)](https://paperswithcode.com/sota/deblurring-on-gopro?p=uformer-a-general-u-shaped-transformer-for) [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/deblurring-on-hide-trained-on-gopro)](https://paperswithcode.com/sota/deblurring-on-hide-trained-on-gopro?p=uformer-a-general-u-shaped-transformer-for)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-defocus-deblurring-on-dpd)](https://paperswithcode.com/sota/image-defocus-deblurring-on-dpd?p=uformer-a-general-u-shaped-transformer-for)
+[![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-enhancement-on-tip-2018)](https://paperswithcode.com/sota/image-enhancement-on-tip-2018?p=uformer-a-general-u-shaped-transformer-for)
 
 Paper: https://arxiv.org/abs/2106.03106
 
 
 ### Update:
+* 2021.11.30 Update Uformer in [Arxiv link](https://arxiv.org/abs/2106.03106). The new code, models and results will be uploaded.
 * 2021.10.28 Release the results of Uformer32 on SIDD and DND.
-* 2021.09.30 Release pre-trianed Uformer16 for SIDD denoising.
+* 2021.09.30 Release pre-trained Uformer16 for SIDD denoising.
 * 2021.08.19 Release a pre-trained model(Uformer32)! Add a script for FLOP/GMAC calculation.
 * 2021.07.29 Add a script for testing the pre-trained model on the arbitrary-resolution images.
 
