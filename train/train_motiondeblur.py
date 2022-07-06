@@ -3,16 +3,18 @@ import sys
 
 # add dir
 dir_name = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.join(dir_name,'./auxiliary/'))
+sys.path.append(os.path.join(dir_name,'../dataset/'))
+sys.path.append(os.path.join(dir_name,'..'))
 print(dir_name)
 
 import argparse
 import options
 ######### parser ###########
-opt = options.Options().init(argparse.ArgumentParser(description='image denoising')).parse_args()
+opt = options.Options().init(argparse.ArgumentParser(description='Image motion deblurring')).parse_args()
 print(opt)
 
 import utils
+from dataset.dataset_motiondeblur import *
 ######### Set GPUs ###########
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpu
@@ -40,10 +42,11 @@ from warmup_scheduler import GradualWarmupScheduler
 from torch.optim.lr_scheduler import StepLR
 from timm.utils import NativeScaler
 
-from utils.loader import  get_training_data,get_validation_data
+
+
 
 ######### Logs dir ###########
-log_dir = os.path.join(dir_name,'log', opt.arch+opt.env)
+log_dir = os.path.join(opt.save_dir,'motiondeblur',opt.dataset, opt.arch+opt.env)
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
 logname = os.path.join(log_dir, datetime.datetime.now().isoformat()+'.txt') 
@@ -76,24 +79,10 @@ else:
     raise Exception("Error optimizer...")
 
 
-######### DataParallel ###########
-model_restoration = torch.nn.DataParallel (model_restoration)
-model_restoration.cuda()
-
-######### Resume ###########
-if opt.resume:
-    path_chk_rest = opt.pretrain_weights
-    utils.load_checkpoint(model_restoration,path_chk_rest)
-    start_epoch = utils.load_start_epoch(path_chk_rest) + 1
-    lr = utils.load_optim(optimizer, path_chk_rest)
-
-    for p in optimizer.param_groups: p['lr'] = lr
-    warmup = False
-    new_lr = lr
-    print('------------------------------------------------------------------------------')
-    print("==> Resuming Training with learning rate:",new_lr)
-    print('------------------------------------------------------------------------------')
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.nepoch-start_epoch+1, eta_min=1e-6)
+######### DataParallel ########### 
+model_restoration = torch.nn.DataParallel (model_restoration) 
+model_restoration.cuda() 
+     
 
 ######### Scheduler ###########
 if opt.warmup:
@@ -108,6 +97,28 @@ else:
     scheduler = StepLR(optimizer, step_size=step, gamma=0.5)
     scheduler.step()
 
+######### Resume ########### 
+if opt.resume: 
+    path_chk_rest = opt.pretrain_weights 
+    print("Resume from "+path_chk_rest)
+    utils.load_checkpoint(model_restoration,path_chk_rest) 
+    start_epoch = utils.load_start_epoch(path_chk_rest) + 1 
+    lr = utils.load_optim(optimizer, path_chk_rest) 
+
+    # for p in optimizer.param_groups: p['lr'] = lr 
+    # warmup = False 
+    # new_lr = lr 
+    # print('------------------------------------------------------------------------------') 
+    # print("==> Resuming Training with learning rate:",new_lr) 
+    # print('------------------------------------------------------------------------------') 
+    for i in range(1, start_epoch):
+        scheduler.step()
+    new_lr = scheduler.get_lr()[0]
+    print('------------------------------------------------------------------------------')
+    print("==> Resuming Training with learning rate:", new_lr)
+    print('------------------------------------------------------------------------------')
+
+    # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, opt.nepoch-start_epoch+1, eta_min=1e-6) 
 
 ######### Loss ###########
 criterion = CharbonnierLoss().cuda()
@@ -117,9 +128,11 @@ print('===> Loading datasets')
 img_options_train = {'patch_size':opt.train_ps}
 train_dataset = get_training_data(opt.train_dir, img_options_train)
 train_loader = DataLoader(dataset=train_dataset, batch_size=opt.batch_size, shuffle=True, 
-        num_workers=opt.train_workers, pin_memory=True, drop_last=False)
+        num_workers=opt.train_workers, pin_memory=False, drop_last=False)
 
-val_dataset = get_validation_data(opt.val_dir)
+img_options_val = {'patch_size':opt.val_ps}
+val_dataset = get_validation_deblur_data(opt.val_dir, img_options_val)
+
 val_loader = DataLoader(dataset=val_dataset, batch_size=opt.batch_size, shuffle=False, 
         num_workers=opt.eval_workers, pin_memory=False, drop_last=False)
 
@@ -128,14 +141,20 @@ len_valset = val_dataset.__len__()
 print("Sizeof training set: ", len_trainset,", sizeof validation set: ", len_valset)
 ######### validation ###########
 with torch.no_grad():
-    psnr_val_rgb = []
+    model_restoration.eval()
+    psnr_dataset = []
+    psnr_model_init = []
     for ii, data_val in enumerate((val_loader), 0):
         target = data_val[0].cuda()
         input_ = data_val[1].cuda()
-        filenames = data_val[2]
-        psnr_val_rgb.append(utils.batch_PSNR(input_, target, False).item())
-    psnr_val_rgb = sum(psnr_val_rgb)/len_valset
-    print('Input & GT (PSNR) -->%.4f dB'%(psnr_val_rgb))
+        with torch.cuda.amp.autocast():
+            restored = model_restoration(input_)
+            restored = torch.clamp(restored,0,1)  
+        psnr_dataset.append(utils.batch_PSNR(input_, target, False).item())
+        psnr_model_init.append(utils.batch_PSNR(restored, target, False).item())
+    psnr_dataset = sum(psnr_dataset)/len_valset
+    psnr_model_init = sum(psnr_model_init)/len_valset
+    print('Input & GT (PSNR) -->%.4f dB'%(psnr_dataset), ', Model_init & GT (PSNR) -->%.4f dB'%(psnr_model_init))
 
 ######### train ###########
 print('===> Start Epoch {} End Epoch {}'.format(start_epoch,opt.nepoch))
@@ -152,18 +171,15 @@ for epoch in range(start_epoch, opt.nepoch + 1):
     epoch_loss = 0
     train_id = 1
 
-    for i, data in enumerate(train_loader, 0): 
+    for i, data in enumerate(tqdm(train_loader), 0): 
         # zero_grad
         optimizer.zero_grad()
 
         target = data[0].cuda()
         input_ = data[1].cuda()
 
-        if epoch>5:
-            target, input_ = utils.MixUp_AUG().aug(target, input_)
         with torch.cuda.amp.autocast():
             restored = model_restoration(input_)
-            restored = torch.clamp(restored,0,1)  
             loss = criterion(restored, target)
         loss_scaler(
                 loss, optimizer,parameters=model_restoration.parameters())

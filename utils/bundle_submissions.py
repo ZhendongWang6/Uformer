@@ -1,10 +1,3 @@
- # Author: Tobias Plötz, TU Darmstadt (tobias.ploetz@visinf.tu-darmstadt.de)
-
- # This file is part of the implementation as described in the CVPR 2017 paper:
- # Tobias Plötz and Stefan Roth, Benchmarking Denoising Algorithms with Real Photographs.
- # Please see the file LICENSE.txt for the license governing this code.
-
-
 import numpy as np
 import scipy.io as sio
 import os

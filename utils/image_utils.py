@@ -49,3 +49,4 @@ def batch_PSNR(img1, img2, average=True):
         psnr = myPSNR(im1, im2)
         PSNR.append(psnr)
     return sum(PSNR)/len(PSNR) if average else sum(PSNR)
+

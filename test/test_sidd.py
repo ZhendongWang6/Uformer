@@ -1,6 +1,5 @@
-
 import numpy as np
-import os,sys,math
+import os,sys
 import argparse
 from tqdm import tqdm
 from einops import rearrange, repeat
@@ -11,33 +10,37 @@ from torch.utils.data import DataLoader
 import torch.nn.functional as F
 from ptflops import get_model_complexity_info
 
-sys.path.append('/home/wangzd/uformer/')
+dir_name = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.join(dir_name,'../dataset/'))
+sys.path.append(os.path.join(dir_name,'..'))
 
 import scipy.io as sio
-from utils.loader import get_validation_data
+from dataset.dataset_denoise import *
 import utils
-
-from model import UNet,Uformer,Uformer_Cross,Uformer_CatCross
+import math
+from model import UNet,Uformer
 
 from skimage import img_as_float32, img_as_ubyte
 from skimage.metrics import peak_signal_noise_ratio as psnr_loss
 from skimage.metrics import structural_similarity as ssim_loss
 
-parser = argparse.ArgumentParser(description='RGB denoising evaluation on the validation set of SIDD')
-parser.add_argument('--input_dir', default='../uformer/datasets/denoising/sidd/test/',
+parser = argparse.ArgumentParser(description='Image denoising evaluation on SIDD')
+parser.add_argument('--input_dir', default='/data1/wangzd/datasets/denoising/sidd_val/',
     type=str, help='Directory of validation images')
-parser.add_argument('--result_dir', default='./results/denoising/sidd/',
+parser.add_argument('--result_dir', default='/data1/wangzd/uformer_cvpr/results_release/denoising/SIDD/Uformer_B/',
     type=str, help='Directory for results')
-parser.add_argument('--weights', default='./log/Uformer32_0806_1/models/model_best.pth',
+parser.add_argument('--weights', default='/data1/wangzd/uformer_cvpr/logs/denoising/SIDD/Uformer_B_1129/models/model_best.pth',
     type=str, help='Path to weights')
-parser.add_argument('--gpus', default='0', type=str, help='CUDA_VISIBLE_DEVICES')
-parser.add_argument('--arch', default='Uformer', type=str, help='arch')
+parser.add_argument('--gpus', default='3', type=str, help='CUDA_VISIBLE_DEVICES')
+parser.add_argument('--arch', default='Uformer_B', type=str, help='arch')
 parser.add_argument('--batch_size', default=1, type=int, help='Batch size for dataloader')
 parser.add_argument('--save_images', action='store_true', help='Save denoised images in result directory')
 parser.add_argument('--embed_dim', type=int, default=32, help='number of data loading workers')    
 parser.add_argument('--win_size', type=int, default=8, help='number of data loading workers')
 parser.add_argument('--token_projection', type=str,default='linear', help='linear/conv token projection')
 parser.add_argument('--token_mlp', type=str,default='leff', help='ffn/leff token mlp')
+parser.add_argument('--dd_in', type=int, default=3, help='dd_in')
+
 # args for vit
 parser.add_argument('--vit_dim', type=int, default=256, help='vit hidden_dim')
 parser.add_argument('--vit_depth', type=int, default=12, help='vit depth')
@@ -55,20 +58,23 @@ args = parser.parse_args()
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
 
-utils.mkdir(args.result_dir)
+result_dir_mat = os.path.join(args.result_dir, 'mat')
+utils.mkdir(result_dir_mat)
 
-test_dataset = get_validation_data(args.input_dir)
-test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=8, drop_last=False)
+# if args.save_images:
+result_dir_img = os.path.join(args.result_dir, 'png')
+utils.mkdir(result_dir_img)
+
+# test_dataset = get_validation_data(args.input_dir)
+# test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, num_workers=8, drop_last=False)
 
 model_restoration= utils.get_arch(args)
-model_restoration = torch.nn.DataParallel(model_restoration)
 
 utils.load_checkpoint(model_restoration,args.weights)
 print("===>Testing using weights: ", args.weights)
 
 model_restoration.cuda()
 model_restoration.eval()
-
 
 def expand2square(timg,factor=16.0):
     _, _, h, w = timg.size()
@@ -81,37 +87,30 @@ def expand2square(timg,factor=16.0):
     # print(img.size(),mask.size())
     # print((X - h)//2, (X - h)//2+h, (X - w)//2, (X - w)//2+w)
     img[:,:, ((X - h)//2):((X - h)//2 + h),((X - w)//2):((X - w)//2 + w)] = timg
-    mask[:,:, ((X - h)//2):((X - h)//2 + h),((X - w)//2):((X - w)//2 + w)].fill_(1.0)
+    mask[:,:, ((X - h)//2):((X - h)//2 + h),((X - w)//2):((X - w)//2 + w)].fill_(1)
     
     return img, mask
 
-
+# Process data
+filepath = os.path.join(args.input_dir, 'ValidationNoisyBlocksSrgb.mat')
+img = sio.loadmat(filepath)
+Inoisy = np.float32(np.array(img['ValidationNoisyBlocksSrgb']))
+Inoisy /=255.
+print(Inoisy.shape)
+restored = np.zeros_like(Inoisy)
 with torch.no_grad():
-    psnr_val_rgb = []
-    ssim_val_rgb = []
-    for ii, data_test in enumerate(tqdm(test_loader), 0):
+    for i in tqdm(range(40)):
+        for k in range(32):
+            noisy_patch = torch.from_numpy(Inoisy[i,k,:,:,:]).unsqueeze(0).permute(0,3,1,2).cuda()
+            _, _, h, w = noisy_patch.shape
+            noisy_patch, mask = expand2square(noisy_patch, factor=128) 
+            restored_patch = model_restoration(noisy_patch)
+            restored_patch = torch.masked_select(restored_patch,mask.bool()).reshape(1,3,h,w)
+            restored_patch = torch.clamp(restored_patch,0,1).cpu().detach().permute(0, 2, 3, 1).squeeze(0)
+            restored[i,k,:,:,:] = restored_patch
 
-        ## TEST THE EFFECT IN DIFFERENT SIZE
-        # xsize = (456,234)
-        # rgb_gt = F.interpolate(data_test[0],size=xsize).numpy().squeeze().transpose((1,2,0))
-        # rgb_noisy, mask = expand2square(F.interpolate(data_test[1].cuda(),size=xsize), factor=64)
+            save_file = os.path.join(result_dir_img, '%04d_%02d.png'%(i+1,k+1))
+            utils.save_img(save_file, img_as_ubyte(restored_patch))
 
-        rgb_gt = data_test[0].numpy().squeeze().transpose((1,2,0))
-        # The factor is calculated (window_size(8) * down_scale(2^4) in this case) 
-        rgb_noisy, mask = expand2square(data_test[1].cuda(), factor=128) 
-        filenames = data_test[2]
-
-        rgb_restored = model_restoration(rgb_noisy, 1 - mask)
-
-        rgb_restored = torch.masked_select(rgb_restored,mask.bool()).reshape(1,3,rgb_gt.shape[0],rgb_gt.shape[1])
-        rgb_restored = torch.clamp(rgb_restored,0,1).cpu().numpy().squeeze().transpose((1,2,0))
-
-        psnr_val_rgb.append(psnr_loss(rgb_restored, rgb_gt))
-        ssim_val_rgb.append(ssim_loss(rgb_restored, rgb_gt, multichannel=True))
-
-        if args.save_images:
-            utils.save_img(os.path.join(args.result_dir,filenames[0]), img_as_ubyte(rgb_restored))
-
-psnr_val_rgb = sum(psnr_val_rgb)/len(test_dataset)
-ssim_val_rgb = sum(ssim_val_rgb)/len(test_dataset)
-print("PSNR: %f, SSIM: %f " %(psnr_val_rgb,ssim_val_rgb))
+# save denoised data
+sio.savemat(os.path.join(result_dir_mat, 'Idenoised.mat'), {"Idenoised": restored,})

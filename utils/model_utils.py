@@ -54,22 +54,28 @@ def load_optim(optimizer, weights):
     return lr
 
 def get_arch(opt):
-    from model import UNet,Uformer,Uformer_Cross,Uformer_CatCross
+    from model import Uformer, UNet
+
     arch = opt.arch
 
     print('You choose '+arch+'...')
     if arch == 'UNet':
         model_restoration = UNet(dim=opt.embed_dim)
     elif arch == 'Uformer':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
-    elif arch == 'Uformer16':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=16,win_size=8,token_projection='linear',token_mlp='leff')
-    elif arch == 'Uformer32':
-        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='leff')
-    elif arch == 'Uformer_CatCross':
-        model_restoration = Uformer_CatCross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=8,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
-    elif arch == 'Uformer_Cross':
-        model_restoration = Uformer_Cross(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=opt.win_size,token_projection=opt.token_projection,token_mlp=opt.token_mlp)
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=opt.embed_dim,win_size=8,token_projection='linear',token_mlp='leff',modulator=True)
+    elif arch == 'Uformer_T':
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=16,win_size=8,token_projection='linear',token_mlp='leff',modulator=True)
+    elif arch == 'Uformer_S':
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='leff',modulator=True)
+    elif arch == 'Uformer_S_noshift':
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='leff',modulator=True,
+            shift_flag=False)
+    elif arch == 'Uformer_B_fastleff':
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='fastleff',
+            depths=[1, 2, 8, 8, 2, 8, 8, 2, 1],modulator=True)  
+    elif arch == 'Uformer_B':
+        model_restoration = Uformer(img_size=opt.train_ps,embed_dim=32,win_size=8,token_projection='linear',token_mlp='leff',
+            depths=[1, 2, 8, 8, 2, 8, 8, 2, 1],modulator=True,dd_in=opt.dd_in)  
     else:
         raise Exception("Arch error!")
 

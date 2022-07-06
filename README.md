@@ -7,10 +7,11 @@
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-defocus-deblurring-on-dpd)](https://paperswithcode.com/sota/image-defocus-deblurring-on-dpd?p=uformer-a-general-u-shaped-transformer-for)
 [![PWC](https://img.shields.io/endpoint.svg?url=https://paperswithcode.com/badge/uformer-a-general-u-shaped-transformer-for/image-enhancement-on-tip-2018)](https://paperswithcode.com/sota/image-enhancement-on-tip-2018?p=uformer-a-general-u-shaped-transformer-for)
 
-Paper: https://arxiv.org/abs/2106.03106
+Paper link: [[Arxiv]](https://arxiv.org/abs/2106.03106) [[CVPR]](https://openaccess.thecvf.com/content/CVPR2022/papers/Wang_Uformer_A_General_U-Shaped_Transformer_for_Image_Restoration_CVPR_2022_paper.pdf)
 
 
 ### Update:
+* **2022.07.06** Upload new codes and models for our Uformer. 
 * **2022.04.09** Upload results of Uformer on denoising (SIDD, DND), motion deblurring (GoPro, HIDE, RealBlur-J/-R), and defocus deblurring (DPDD). 
 * **2022.03.02** Uformer has been accepted by CVPR 2022! :fire:
 * **2021.11.30** Update Uformer in [Arxiv link](https://arxiv.org/abs/2106.03106). The new code, models and results will be uploaded.
@@ -22,21 +23,20 @@ Paper: https://arxiv.org/abs/2106.03106
 <hr>
 <i>In this paper, we present Uformer, an effective and efficient Transformer-based architecture, in which we build a hierarchical encoder-decoder network using the Transformer block for image restoration. Uformer has two core designs to make it suitable for this task. The first key element is a local-enhanced window Transformer block, where we use non-overlapping window-based self-attention to reduce the computational requirement and employ the depth-wise convolution in the feed-forward network to further improve its potential for capturing local context. The second key element is that we explore three skip-connection schemes to effectively deliver information from the encoder to the decoder. Powered by these two designs, Uformer enjoys a high capability for capturing useful dependencies for image restoration. Extensive experiments on several image restoration tasks demonstrate the superiority of Uformer, including image denoising, deraining, deblurring and demoireing. We expect that our work will encourage further research to explore Transformer-based architectures for low-level vision tasks.</i>
 
-![Uformer](figs/Uformer.png)
+![Uformer](fig/Uformer.png)
 
 ## Package dependencies
-The project is built with PyTorch 1.7.1, Python3.7, CUDA10.1. For package dependencies, you can install them by:
+The project is built with PyTorch 1.9.0, Python3.7, CUDA11.1. For package dependencies, you can install them by:
 ```bash
 pip install -r requirements.txt
 ```
 
 ## Pretrained model
-- Uformer32_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1dS7Lh46SMbncnwRW9zM5AW3cXrvYkjQU/view?usp=sharing): PSNR 39.77 dB.
-- Uformer16_denoising_sidd.pth [[Google Drive]](https://drive.google.com/file/d/1H1TKHw2gcKORC-MwSkBp9g93T4B1jh_b/view?usp=sharing): PSNR 39.65 dB.
+- Uformer_B: [SIDD](https://mailustceducn-my.sharepoint.com/:u:/g/personal/zhendongwang_mail_ustc_edu_cn/Ea7hMP82A0xFlOKPlQnBJy0B9gVP-1MJL75mR4QKBMGc2w?e=iOz0zz) |
+[GoPro](https://mailustceducn-my.sharepoint.com/:u:/g/personal/zhendongwang_mail_ustc_edu_cn/EfCPoTSEKJRAshoE6EAC_3YB7oNkbLUX6AUgWSCwoJe0oA?e=jai90x)
 
 ## Results from the pretrained model
 - Uformer_B: [SIDD](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/EtcRYRDGWhBIlQa3EYBp4FYBao7ZZT2dPc5k1Qe-CdPh3A?e=PjBMub) | [DND](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/Ekv3A5ic_4RChFa9XXquF_MB8M8tFd7spyHGJi_8obycnA?e=W7xeHe) | [GoPro](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/ElFalK0Qb8NHnyvhkSe1APgB5D0urGRMLnu2nBXJhtzdIw?e=D2XBhS) | [HIDE](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/Eh4p1_kZ95xIopXDNyhl-Q0B65xX6C3J_fL-TQDbgvofqQ?e=8766eT) | [RealBlur-J](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/EpHFC9FauEpHhJDsFruEmmQBJ4_ZZaMgjaO9SHmB_vocaA?e=3a4b8A) | [RealBlur-R](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/Eo2EC8rmkapNu9CxcYLwFpYBD8tX8pvfX_60jJIP8TGgGQ?e=yGbkQ8) | [DPDD](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/EvVAI84ZvlNChWsZA6QY4IkBc201zdTAs_g2Ufd5l0FgIQ?e=2DTlah)
-- Uformer32: [SIDD](https://drive.google.com/file/d/19lohIfoaxXsWS3DtRtxLh1kl9Dm-ACd-/view?usp=sharing) |  [DND](https://drive.google.com/file/d/1vdg0dp6Rpb623cPsJlXR3YjJu_C-Tap8/view?usp=sharing)
 
 
 ## Data preparation 
@@ -47,35 +47,41 @@ Then generate training patches for training by:
 python3 generate_patches_SIDD.py --src_dir ../SIDD_Medium_Srgb/Data --tar_dir ../datasets/denoising/sidd/train
 ```
 
-For evaluation, we use the same evaluation data as [here](https://drive.google.com/drive/folders/1j5ESMU0HJGD-wU6qbEdnt569z7sM3479), and put it into the dir `../datasets/denoising/sidd/val`.
+For evaluation on SIDD and DND, you can download data from [here](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/Ev832uKaw2JJhwROKqiXGfMBttyFko_zrDVzfSbFFDoi4Q?e=S3p5hQ).
+
+
+### Deblurring
+For training on GoPro, and evaluation on GoPro, HIDE, RealBlur-J and RealBlur-R, you can download data from [here](https://mailustceducn-my.sharepoint.com/:f:/g/personal/zhendongwang_mail_ustc_edu_cn/Ev832uKaw2JJhwROKqiXGfMBttyFko_zrDVzfSbFFDoi4Q?e=S3p5hQ).
+
+
+Then put all the denoising data into `../datasets/denoising`, and all the deblurring data into `../datasets/deblurring`.
 
 ## Training
 ### Denoising
-To train `Uformer32(embed_dim=32)` on SIDD, we use 2 V100 GPUs and run for 250 epochs:
+To train Uformer on SIDD, you can begin the training by:
 
-```python
-python3 ./train.py --arch Uformer --batch_size 32 --gpu '0,1' \
-    --train_ps 128 --train_dir ../datasets/denoising/sidd/train --env 32_0705_1 \
-    --val_dir ../datasets/denoising/sidd/val --embed_dim 32 --warmup
+```sh
+sh script/train_denoise.sh
+```
+### Deblurring
+To train Uformer on GoPro, you can begin the training by:
+
+```sh
+sh script/train_motiondeblur.sh
 ```
 
-More configuration can be founded in `train.sh`.
 
 ## Evaluation
-### Denoising
+To evaluate Uformer, you can run:
 
-To evaluate `Uformer32` on SIDD, you can run:
-
-```python
-python3 ./test.py --arch Uformer --batch_size 1 --gpu '0' \
-    --input_dir ../datasets/denoising/sidd/val --result_dir YOUR_RESULT_DIR \
-    --weights YOUR_PRETRAINED_MODEL_PATH --embed_dim 32 
+```sh
+sh script/test.sh
 ```
-
+For evaluate on each dataset, you should uncomment corresponding line.
 
 ## Computational Cost
 
-We provide a simple script to calculate the flops by ourselves, a simple script has been added in `model.py`. You can change the configuration and run it via:
+We provide a simple script to calculate the flops by ourselves, a simple script has been added in `model.py`. You can change the configuration and run:
 
 ```python
 python3 model.py
@@ -88,11 +94,13 @@ python3 model.py
 If you find this project useful in your research, please consider citing:
 
 ```
-@inproceedings{Wang2022Uformer,
-	title={Uformer: A General U-Shaped Transformer for Image Restoration},
-	author={Wang, Zhendong and Cun, Xiaodong and Bao, Jianmin and Zhou, Wengang and Liu, Jianzhuang and Li, Houqiang},
-	booktitle={Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)},
-	year={2022}
+@InProceedings{Wang_2022_CVPR,
+    author    = {Wang, Zhendong and Cun, Xiaodong and Bao, Jianmin and Zhou, Wengang and Liu, Jianzhuang and Li, Houqiang},
+    title     = {Uformer: A General U-Shaped Transformer for Image Restoration},
+    booktitle = {Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
+    month     = {June},
+    year      = {2022},
+    pages     = {17683-17693}
 }
 ```
 
