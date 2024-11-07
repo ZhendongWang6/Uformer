@@ -13,4 +13,3 @@ linformer
 timm
 ptflops
 dataclasses
-natsort
